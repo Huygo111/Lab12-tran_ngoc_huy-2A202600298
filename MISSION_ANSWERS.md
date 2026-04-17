@@ -59,7 +59,7 @@ reload=True         # debug reload trong production
 
 ### Exercise 3.1: Railway deployment
 - URL: https://ai-agent-ujf7.onrender.com/
-- Screenshot: Screenshot Render deployment.png
+- Screenshot: D:\VIN AI Action\Lab12-tran_ngoc_huy\Screenshot Render deployment.png
 
 ## Part 4: API Security
 
