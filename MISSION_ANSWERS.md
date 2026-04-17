@@ -58,18 +58,188 @@ reload=True         # debug reload trong production
 ## Part 3: Cloud Deployment
 
 ### Exercise 3.1: Railway deployment
-- URL: https://your-app.railway.app
-- Screenshot: [Link to screenshot in repo]
+- URL: https://ai-agent-ujf7.onrender.com/
+- Screenshot: Screenshot Render deployment.png
 
 ## Part 4: API Security
 
-### Exercise 4.1-4.3: Test results
-[Paste your test outputs]
+### Exercise 4.1: API Key Authentication
+
+**Câu hỏi & Trả lời:**
+
+| Câu hỏi | Trả lời |
+|---------|---------|
+| API key được check ở đâu? | Hàm `verify_api_key()` trong `app.py` dùng `APIKeyHeader(name="X-API-Key")` để đọc header, sau đó so sánh với env var `AGENT_API_KEY`. Được inject vào endpoint qua `Depends(verify_api_key)` |
+| Điều gì xảy ra nếu sai/thiếu key? | Thiếu key → HTTP 401 `Missing API key`. Sai key → HTTP 403 `Invalid API key` |
+| Làm sao rotate key? | Đổi giá trị env var `AGENT_API_KEY` rồi restart app — không cần sửa code |
+
+**Test results:**
+```
+# Không có key → 401
+curl.exe -s http://localhost:8001/ask?question=Hello -X POST
+{"detail":"Missing API key. Include header: X-API-Key: <your-key>"}
+
+# Có key đúng → 200
+curl.exe -s http://localhost:8001/ask?question=Hello -X POST -H "X-API-Key: secret-key-123"
+{"question":"Hello","answer":"Agent đang hoạt động tốt! (mock response) Hỏi thêm câu hỏi đi nhé."}
+```
+
+### Exercise 4.2: JWT Authentication
+
+**JWT Flow:**
+1. Client gửi `POST /auth/token` với username/password
+2. Server verify credentials → tạo JWT token (signed bằng `SECRET_KEY`)
+3. Client gửi token trong header `Authorization: Bearer <token>` cho mọi request
+4. Server verify signature → extract `username` và `role` từ token → xử lý request
+
+**Test results:**
+```
+# Lấy token
+POST /auth/token {"username":"student","password":"demo123"}
+→ access_token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+# Dùng token gọi /ask
+POST /ask với Authorization: Bearer <token>
+→ {"question":"Explain JWT","answer":"..."}
+```
+
+**Ưu điểm JWT so với API Key:**
+
+| Tiêu chí | API Key | JWT |
+|----------|---------|-----|
+| Stateless | Yes | Yes |
+| Chứa thông tin user | No | Yes (role, expiry) |
+| Có thể expire | No | Yes (60 phút) |
+| Phù hợp cho | Internal API | User-facing API |
+
+### Exercise 4.3: Rate Limiting
+
+| Câu hỏi | Trả lời |
+|---------|---------|
+| Algorithm | Sliding Window Counter — đếm request trong 60 giây gần nhất |
+| Limit | user: 10 req/phút, admin: 100 req/phút |
+| Bypass cho admin | Role `admin` dùng `rate_limiter_admin` (100 req/phút) thay vì `rate_limiter_user` |
+
+**Test results:**
+```
+[1] OK - remaining: 9
+[2] OK - remaining: 8
+...
+[10] OK - remaining: 0
+[11] RATE LIMITED: 429 - {"error":"Rate limit exceeded","limit":10,"window_seconds":60,"retry_after_seconds":59}
+[12] RATE LIMITED: 429 - {"error":"Rate limit exceeded","limit":10,"window_seconds":60,"retry_after_seconds":59}
+```
 
 ### Exercise 4.4: Cost guard implementation
-[Explain your approach]
+
+**Cách hoạt động:**
+
+| Câu hỏi | Trả lời |
+|---------|---------|
+| Logic check budget | 2 tầng: global ($10/ngày tổng) và per-user ($1/ngày). Vượt → HTTP 402 |
+| Reset khi nào? | Mỗi ngày — so sánh `record.day` với ngày hôm nay, khác → tạo record mới |
+| Khác CODE_LAB solution? | CODE_LAB dùng Redis (scale được). File này dùng in-memory dict (mất khi restart) |
+
+**Test usage result:**
+```
+user_id              : student
+date                 : 2026-04-17
+requests             : 11
+input_tokens         : 44
+output_tokens        : 326
+cost_usd             : 0.000202
+budget_usd           : 1.0
+budget_remaining_usd : 0.999798
+budget_used_pct      : 0.0
+```
 
 ## Part 5: Scaling & Reliability
 
-### Exercise 5.1-5.5: Implementation notes
-[Your explanations and test results]
+### Exercise 5.1: Health Checks
+
+| Endpoint | Loại probe | Mục đích |
+|----------|-----------|---------|
+| `/health` | Liveness | Platform hỏi "container còn sống không?" → restart nếu fail |
+| `/ready` | Readiness | Load balancer hỏi "có nhận traffic không?" → 503 khi startup/shutdown |
+
+**Test results:**
+```
+GET /health
+status         : ok
+uptime_seconds : 20.3
+version        : 1.0.0
+environment    : development
+checks         : @{memory=}
+
+GET /ready
+ready : True
+in_flight_requests : 1
+```
+
+### Exercise 5.2: Graceful Shutdown
+
+**Cách hoạt động:**
+- App bắt tín hiệu `SIGINT` (Ctrl+C) và `SIGTERM` (platform gửi khi tắt container)
+- `lifespan` shutdown: đặt `_is_ready = False`, chờ in-flight requests hoàn thành (tối đa 30 giây)
+- Request đang xử lý được hoàn thành trước khi tắt
+
+**Test results:**
+```
+POST /ask?question=LongTask  → 200 OK (hoàn thành trước khi tắt)
+Received signal 2 — uvicorn will handle graceful shutdown
+Graceful shutdown initiated...
+Shutdown complete
+```
+
+**SIGTERM vs SIGKILL:**
+| Signal | Có thể bắt? | Platform dùng khi nào? |
+|--------|------------|----------------------|
+| SIGTERM | Yes | Tắt bình thường — cho app dọn dẹp |
+| SIGKILL | No | Force kill sau timeout |
+
+### Exercise 5.3: Stateless Design
+
+**Tại sao stateless quan trọng:**
+- Nếu lưu session trong memory: instance 1 có session, instance 2 không có → bug khi scale
+- Giải pháp: lưu session trong Redis → mọi instance đều đọc được
+
+**Test results:**
+```
+# Request 1
+Session: 9c351b2c-ce16-4797-8982-084f8495bc88
+Served by: instance-b62478
+
+# Request 2 (cùng session)
+Turn: 3
+Served by: instance-b62478
+Storage: in-memory (fallback vì không có Redis)
+
+# History vẫn còn sau 2 turns
+session_id: 9c351b2c-ce16-4797-8982-084f8495bc88
+messages: [{role=user, content=Hello I am Huy}, ...]
+```
+
+**Anti-pattern vs Correct:**
+| | Anti-pattern | Stateless |
+|-|-------------|-----------|
+| Lưu session ở đâu? | `conversation_history = {}` trong memory | Redis với TTL |
+| Khi scale 3 instances? | Mỗi instance có memory riêng → mất session | Tất cả đọc chung Redis |
+| Restart app? | Mất hết data | Data vẫn còn trong Redis |
+
+### Exercise 5.5: Test Stateless
+
+**Test results:**
+```
+Session: feea3808-1233-4b2a-bded-ffda6a5c4783
+Request 1: [instance-b62478] storage=in-memory
+Request 2: [instance-b62478] storage=in-memory
+Request 3: [instance-b62478] storage=in-memory
+History messages: 6
+Instances seen: {'instance-b62478'}
+```
+
+**Nhận xét:**
+- Chỉ thấy 1 instance vì đang chạy local (không có Docker scale)
+- `storage=in-memory` vì không có Redis — nếu có Redis sẽ là `storage=redis`
+- History được giữ đúng qua 3 requests (6 messages = 3 user + 3 assistant)
+- Với `docker compose up --scale agent=3` + Redis, `instances_seen` sẽ có nhiều instance khác nhau nhưng history vẫn intact
