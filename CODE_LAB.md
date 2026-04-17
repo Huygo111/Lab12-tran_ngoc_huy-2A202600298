@@ -106,11 +106,11 @@ python app.py
 **Nhiệm vụ:** So sánh 2 files `app.py`. Điền vào bảng:
 
 | Feature | Basic | Advanced | Tại sao quan trọng? |
-|---------|-------|----------|---------------------|
-| Config | Hardcode | Env vars | ... |
-| Health check |  |  | ... |
-| Logging | print() | JSON | ... |
-| Shutdown | Đột ngột | Graceful | ... |
+|---------|-------|----------|-----------------|
+| Config | Hardcode | Env vars | Không lộ secret lên GitHub |
+| Health check | Không có | /health + /ready | Platform tự restart khi crash |
+| Logging | print() | JSON structured | Dễ parse, không lộ key |
+| Shutdown | Đột ngột | Graceful | Request đang chạy được hoàn thành |
 
 ###  Checkpoint 1
 
