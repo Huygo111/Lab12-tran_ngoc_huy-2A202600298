@@ -243,3 +243,45 @@ Instances seen: {'instance-b62478'}
 - `storage=in-memory` vì không có Redis — nếu có Redis sẽ là `storage=redis`
 - History được giữ đúng qua 3 requests (6 messages = 3 user + 3 assistant)
 - Với `docker compose up --scale agent=3` + Redis, `instances_seen` sẽ có nhiều instance khác nhau nhưng history vẫn intact
+
+### Exercise 6:
+
+```cd "D:\VIN AI Action\Lab12-tran_ngoc_huy\06-lab-complete"                                                                                                    
+(.venv) PS D:\VIN AI Action\Lab12-tran_ngoc_huy\06-lab-complete> python check_production_ready.py
+
+=======================================================
+  Production Readiness Check — Day 12 Lab
+=======================================================
+
+📁 Required Files
+  ✅ Dockerfile exists
+  ✅ docker-compose.yml exists
+  ✅ .dockerignore exists
+  ✅ .env.example exists
+  ✅ requirements.txt exists
+  ✅ railway.toml or render.yaml exists
+
+🔒 Security
+  ✅ .env in .gitignore
+  ✅ No hardcoded secrets in code
+
+🌐 API Endpoints (code check)
+  ✅ /health endpoint defined
+  ✅ /ready endpoint defined
+  ✅ Authentication implemented
+  ✅ Rate limiting implemented
+  ✅ Graceful shutdown (SIGTERM)
+  ✅ Structured logging (JSON)
+
+🐳 Docker
+  ✅ Multi-stage build
+  ✅ Non-root user
+  ✅ HEALTHCHECK instruction
+  ✅ Slim base image
+  ✅ .dockerignore covers .env
+  ✅ .dockerignore covers __pycache__
+
+=======================================================
+  Result: 20/20 checks passed (100%)
+  🎉 PRODUCTION READY! Deploy nào!
+=======================================================```
