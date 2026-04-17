@@ -15,8 +15,8 @@ services:
     region: singapore         # Chọn region gần user nhất
     plan: free                # free | starter | standard | pro
 
-    buildCommand: pip install -r 03-cloud-deployment/railway/requirements.txt
-    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT --app-dir 03-cloud-deployment/railway
+    buildCommand: pip install -r my-production-agent/requirements.txt
+    startCommand: cd my-production-agent && uvicorn app.main:app --host 0.0.0.0 --port $PORT
 
     healthCheckPath: /health   # Render check path này
 
@@ -27,9 +27,19 @@ services:
         value: production
       - key: PYTHON_VERSION
         value: 3.11.0
+      - key: RATE_LIMIT_PER_MINUTE
+        value: "10"
+      - key: MONTHLY_BUDGET_USD
+        value: "10.0"
+      - key: LOG_LEVEL
+        value: INFO
+      # Redis URL — Render tự điền từ Redis service bên dưới
+      - key: REDIS_URL
+        fromService:
+          name: agent-cache
+          type: redis
+          property: connectionString
       # Secrets — set qua Render Dashboard (không commit giá trị thật)
-      - key: OPENAI_API_KEY
-        sync: false            # sync: false = set thủ công trên dashboard
       - key: AGENT_API_KEY
         generateValue: true    # Render tự sinh random value
 
